@@ -22,6 +22,10 @@
 #include "luks2_internal.h"
 #include "utils_device_locking.h"
 
+// #define DEBUG_DMTABLES 1
+// #define DEBUG_ZERO 1
+// #define DEBUG 1
+
 static json_object *reencrypt_segment(struct luks2_hdr *hdr, unsigned new)
 {
 	return LUKS2_get_segment_by_flag(hdr, new ? "backup-final" : "backup-previous");
@@ -2963,6 +2967,19 @@ static reenc_status_t reencrypt_step(struct crypt_device *cd,
 		bool online)
 {
 	int r;
+#ifdef DEBUG_DMTABLES
+	char cmd[1024];
+	unsigned step = 0;
+#endif
+#ifdef DEBUG
+	char backup_name[128];
+	static unsigned bcp=0;
+#endif
+#ifdef DEBUG_ZERO
+	char *zero_buffer = calloc(reencrypt_buffer_length(rh), 1);
+	if (!zero_buffer)
+		return REENC_ERR;
+#endif
 
 	/* update reencrypt keyslot protection parameters in memory only */
 	r = reenc_keyslot_update(cd, rh);
@@ -2988,6 +3005,15 @@ static reenc_status_t reencrypt_step(struct crypt_device *cd,
 		if (r != REENC_OK)
 			return r;
 	}
+
+#ifdef DEBUG_DMTABLES
+	snprintf(cmd, 1024, "dmsetup info > /tmp/log-step%d", step);
+	system(cmd);
+	snprintf(cmd, 1024, "dmsetup table >> /tmp/log-step%d", step);
+	system(cmd);
+	snprintf(cmd, 1024, "dmsetup table --inactive >> /tmp/log-step%d", step++);
+	system(cmd);
+#endif
 
 	log_dbg(cd, "Reencrypting chunk starting at offset: %" PRIu64 ", size :%" PRIu64 ".", rh->offset, rh->length);
 	log_dbg(cd, "data_offset: %" PRIu64, crypt_get_data_offset(cd) << SECTOR_SHIFT);
@@ -3024,12 +3050,23 @@ static reenc_status_t reencrypt_step(struct crypt_device *cd,
 		return REENC_ROLLBACK;
 	}
 
+#ifdef DEBUG
+	snprintf(backup_name, sizeof(backup_name), "%u-dirty-debug-luks2-backup-uuid-%s", bcp, crypt_get_uuid(cd));
+	crypt_header_backup(cd, CRYPT_LUKS2, backup_name);
+#endif
+
 	r = crypt_storage_wrapper_decrypt(rh->cw1, rh->offset, rh->reenc_buffer, rh->read);
 	if (r) {
 		/* severity normal */
 		log_err(cd, _("Decryption failed."));
 		return REENC_ROLLBACK;
 	}
+#ifdef DEBUG_ZERO
+		if (memcmp(zero_buffer, rh->reenc_buffer, rh->read)) {
+			log_err(cd, "reencryption is fishy.");
+			return REENC_FATAL;
+		}
+#endif
 	if (rh->read != crypt_storage_wrapper_encrypt_write(rh->cw2, rh->offset, rh->reenc_buffer, rh->read)) {
 		/* severity fatal */
 		log_err(cd, _("Failed to write hotzone area starting at %" PRIu64 "."), rh->offset);
@@ -3049,6 +3086,11 @@ static reenc_status_t reencrypt_step(struct crypt_device *cd,
 		return REENC_FATAL;
 	}
 
+#ifdef DEBUG
+	snprintf(backup_name, sizeof(backup_name), "%u-clear-debug-luks2-backup-uuid-%s", bcp++, crypt_get_uuid(cd));
+	crypt_header_backup(cd, CRYPT_LUKS2, backup_name);
+#endif
+
 	if (online) {
 		/* severity normal */
 		log_dbg(cd, "Resuming device %s", rh->hotzone_name);
@@ -3058,6 +3100,10 @@ static reenc_status_t reencrypt_step(struct crypt_device *cd,
 			return REENC_ERR;
 		}
 	}
+
+#ifdef DEBUG_ZERO
+	free(zero_buffer);
+#endif
 
 	return REENC_OK;
 }
@@ -3108,12 +3154,24 @@ static int reencrypt_teardown_ok(struct crypt_device *cd, struct luks2_hdr *hdr,
 {
 	int i, r;
 	bool finished = !(rh->device_size > rh->progress);
+#ifdef DEBUG_DMTABLES
+	char cmd[1024];
+#endif
 
 	if (rh->rp.type == REENC_PROTECTION_NONE &&
 	    LUKS2_hdr_write(cd, hdr)) {
 		log_err(cd, _("Failed to write LUKS2 metadata."));
 		return -EINVAL;
 	}
+
+#ifdef DEBUG_DMTABLES
+	snprintf(cmd, 1024, "dmsetup info > /tmp/log-step-final");
+	system(cmd);
+	snprintf(cmd, 1024, "dmsetup table >> /tmp/log-step-final");
+	system(cmd);
+	snprintf(cmd, 1024, "dmsetup table --inactive >> /tmp/log-step-final");
+	system(cmd);
+#endif
 
 	if (rh->online) {
 		r = LUKS2_reload(cd, rh->device_name, rh->vks, rh->device_size, CRYPT_ACTIVATE_KEYRING_KEY | CRYPT_ACTIVATE_SHARED);
@@ -3195,6 +3253,9 @@ static int reencrypt_teardown(struct crypt_device *cd, struct luks2_hdr *hdr,
 int crypt_reencrypt(struct crypt_device *cd,
 		    int (*progress)(uint64_t size, uint64_t offset, void *usrptr))
 {
+#ifdef DEBUG
+	char backup_name[1024];
+#endif
 	int r;
 	crypt_reencrypt_info ri;
 	struct luks2_hdr *hdr;
@@ -3225,6 +3286,15 @@ int crypt_reencrypt(struct crypt_device *cd,
 		log_err(cd, _("Failed to initialize reencryption device stack."));
 		return -EINVAL;
 	}
+
+#ifdef DEBUG
+	if (LUKS2_hdr_write(cd, hdr)) {
+		log_err(cd, "Failed to store luks2 hdr");
+		return -EINVAL;
+	}
+	snprintf(backup_name, sizeof(backup_name), "clear-debug-luks2-backup-uuid-%s", crypt_get_uuid(cd));
+	crypt_header_backup(cd, CRYPT_LUKS2, backup_name);
+#endif
 
 	log_dbg(cd, "Progress %" PRIu64 ", device_size %" PRIu64, rh->progress, rh->device_size);
 
