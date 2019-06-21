@@ -847,7 +847,7 @@ int TCRYPT_activate(struct crypt_device *cd,
 
 		log_dbg(cd, "Trying to activate TCRYPT device %s using cipher %s.",
 			dm_name, dmd.segment.u.crypt.cipher);
-		r = dm_create_device(cd, dm_name, CRYPT_TCRYPT, &dmd);
+		r = dm_create_device(cd, dm_name, i == 1 ? CRYPT_TCRYPT : CRYPT_SUBDEV, &dmd);
 
 		dm_targets_free(cd, &dmd);
 		device_free(cd, device);
@@ -896,24 +896,46 @@ int TCRYPT_deactivate(struct crypt_device *cd, const char *name, uint32_t flags)
 {
 	struct crypt_dm_active_device dmd;
 	int r;
+	char *base_uuid, **dep, *deps[3] = { 0 };
 
 	r = dm_query_device(cd, name, DM_ACTIVE_UUID, &dmd);
 	if (r < 0)
 		return r;
-	if (!dmd.uuid)
+	if (!dmd.uuid || strlen(dmd.uuid) < 6) /* strlen("TCRYPT") */
 		return -EINVAL;
+
+	if (asprintf(&base_uuid, CRYPT_SUBDEV "%s", dmd.uuid + 6) < 0)
+		return -ENOMEM;
+
+	r = dm_device_deps(cd, name, base_uuid, deps, ARRAY_SIZE(deps));
+	free(base_uuid);
+	if (r)
+		goto out;
 
 	r = dm_remove_device(cd, name, flags);
 	if (r < 0)
 		goto out;
 
+	dep = deps;
+	while (*dep) {
+		r = dm_remove_device(cd, *dep, flags);
+		if (r)
+			goto out;
+		dep++;
+	}
+
+	/* FIXME: TCRYPT_remove_one is obsolete code. Remove in 2.4.0 or later */
 	r = TCRYPT_remove_one(cd, name, dmd.uuid, 1, flags);
-	if (r < 0)
+	if (r < 0 && r != -ENODEV)
 		goto out;
 
+	/* FIXME: TCRYPT_remove_one is obsolete code. Remove in 2.4.0 or later */
 	r = TCRYPT_remove_one(cd, name, dmd.uuid, 2, flags);
 out:
 	free(CONST_CAST(void*)dmd.uuid);
+	dep = deps;
+	while (*dep)
+		free(*dep++);
 	return (r == -ENODEV) ? 0 : r;
 }
 
@@ -973,9 +995,12 @@ int TCRYPT_init_by_name(struct crypt_device *cd, const char *name,
 			struct tcrypt_phdr *tcrypt_hdr)
 {
 	struct tcrypt_algs *algs;
-	char cipher[MAX_CIPHER_LEN * 4], mode[MAX_CIPHER_LEN+1], *tmp;
+	char cipher[MAX_CIPHER_LEN * 4], mode[MAX_CIPHER_LEN+1], *tmp, *base_uuid;
 	size_t key_size;
 	int r;
+
+	if (!uuid || strlen(uuid) < 6)
+		return -EINVAL;
 
 	memset(tcrypt_params, 0, sizeof(*tcrypt_params));
 	memset(tcrypt_hdr, 0, sizeof(*tcrypt_hdr));
@@ -991,12 +1016,14 @@ int TCRYPT_init_by_name(struct crypt_device *cd, const char *name,
 	strncpy(mode, ++tmp, MAX_CIPHER_LEN);
 
 	key_size = tgt->u.crypt.vk->keylength;
-	r = TCRYPT_status_one(cd, name, uuid, 1, &key_size,
+	if (asprintf(&base_uuid, CRYPT_SUBDEV "%s", uuid + 6) < 0)
+		return -EINVAL;
+	r = TCRYPT_status_one(cd, name, base_uuid, 1, &key_size,
 			      cipher, tcrypt_hdr, device);
 	if (!r)
-		r = TCRYPT_status_one(cd, name, uuid, 2, &key_size,
+		r = TCRYPT_status_one(cd, name, base_uuid, 2, &key_size,
 				      cipher, tcrypt_hdr, device);
-
+	free(base_uuid);
 	if (r < 0 && r != -ENODEV)
 		return r;
 
