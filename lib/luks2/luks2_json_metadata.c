@@ -2227,7 +2227,7 @@ int LUKS2_deactivate(struct crypt_device *cd, const char *name, struct luks2_hdr
 
 	tgt = &dmd->segment;
 
-	/* TODO: We have LUKS2 dependencies now */
+	/* FIXME: This is obsolete code, remove in 2.4.0 or later */
 	if (hdr && single_segment(dmd) && tgt->type == DM_CRYPT && crypt_get_integrity_tag_size(cd))
 		namei = device_dm_name(tgt->data_device);
 
@@ -2273,12 +2273,6 @@ int LUKS2_deactivate(struct crypt_device *cd, const char *name, struct luks2_hdr
 	}
 	dm_targets_free(cd, &dmdc);
 
-	/* TODO: We have LUKS2 dependencies now */
-	if (r >= 0 && namei) {
-		log_dbg(cd, "Deactivating integrity device %s.", namei);
-		r = dm_remove_device(cd, namei, 0);
-	}
-
 	if (!r) {
 		ret = 0;
 		dep = deps;
@@ -2314,6 +2308,11 @@ int LUKS2_deactivate(struct crypt_device *cd, const char *name, struct luks2_hdr
 		r = ret;
 	}
 
+	/* FIXME: This is obsolete code, remove in 2.4.0 or later */
+	if (r >= 0 && namei && (crypt_status(cd, namei) >= CRYPT_ACTIVE)) {
+		log_dbg(cd, "Deactivating integrity device %s.", namei);
+		r = dm_remove_device(cd, namei, 0);
+	}
 out:
 	crypt_reencrypt_unlock(cd, reencrypt_lock);
 	dep = deps;

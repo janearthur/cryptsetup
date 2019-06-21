@@ -1102,7 +1102,7 @@ static int _init_by_name_crypt(struct crypt_device *cd, const char *name)
 {
 	bool found = false;
 	char **dep, *cipher_spec = NULL, cipher[MAX_CIPHER_LEN], cipher_mode[MAX_CIPHER_LEN], deps_uuid_prefix[40], *deps[MAX_DM_DEPS+1] = {};
-	const char *dev, *namei;
+	const char *dev;
 	int key_nums, r;
 	struct crypt_dm_active_device dmd, dmdi = {}, dmdep = {};
 	struct dm_target *tgt = &dmd.segment, *tgti = &dmdi.segment;
@@ -1144,19 +1144,18 @@ static int _init_by_name_crypt(struct crypt_device *cd, const char *name)
 
 	dep = deps;
 
-	if (tgt->type == DM_CRYPT && tgt->u.crypt.integrity && (namei = device_dm_name(tgt->data_device))) {
-		r = dm_query_device(cd, namei, DM_ACTIVE_DEVICE, &dmdi);
+	if (!cd->metadata_device && single_segment(&dmd) && tgt->type == DM_CRYPT && tgt->u.crypt.integrity && *dep) {
+		r = dm_query_device(cd, *dep, DM_ACTIVE_DEVICE, &dmdi);
 		if (r < 0)
 			goto out;
 		if (!single_segment(&dmdi) || tgti->type != DM_INTEGRITY) {
-			log_dbg(cd, "Unsupported device table detected in %s.", namei);
+			log_dbg(cd, "Unsupported device table detected in %s.", *dep);
 			r = -EINVAL;
 			goto out;
 		}
-		if (!cd->metadata_device) {
-			device_free(cd, cd->device);
-			MOVE_REF(cd->device, tgti->data_device);
-		}
+		device_free(cd, cd->device);
+		MOVE_REF(cd->device, tgti->data_device);
+		found = true;
 	}
 
 	/* do not try to lookup LUKS2 header in detached header mode */
@@ -2286,7 +2285,7 @@ static int _compare_device_types(struct crypt_device *cd,
 		return -EINVAL;
 	}
 
-	if (isLUKS2(cd->type) && !strncmp("INTEGRITY-", tgt->uuid, strlen("INTEGRITY-"))) {
+	if (isLUKS2(cd->type) && !strncmp(CRYPT_SUBDEV "-", tgt->uuid, strlen(CRYPT_SUBDEV) + 1)) {
 		if (crypt_uuid_cmp(tgt->uuid, src->uuid)) {
 			log_dbg(cd, "LUKS UUID mismatch.");
 			return -EINVAL;
@@ -3610,7 +3609,7 @@ static int _create_device_with_integrity(struct crypt_device *cd,
 
 	device_check = dmd->flags & CRYPT_ACTIVATE_SHARED ? DEV_OK : DEV_EXCL;
 
-	r = INTEGRITY_activate_dmd_device(cd, iname, CRYPT_INTEGRITY, dmdi);
+	r = INTEGRITY_activate_dmd_device(cd, iname, CRYPT_SUBDEV, dmdi);
 	if (r)
 		return r;
 
