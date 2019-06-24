@@ -33,6 +33,7 @@ include lib/crypto_backend/Makemodule.am
 include lib/Makemodule.am
 
 include src/Makemodule.am
+include tokens/Makemodule.am
 
 ACLOCAL_AMFLAGS = -I m4
 
