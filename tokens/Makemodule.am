@@ -13,3 +13,34 @@ lib_LTLIBRARIES += libcryptsetup-token-sshtest.la
 cryptsetup_sshtest_SOURCES = tokens/cryptsetup-sshtest.c
 cryptsetup_sshtest_LDADD = -lm libcryptsetup.la @JSON_C_LIBS@
 sbin_PROGRAMS += cryptsetup-sshtest
+
+# TPM2 token and app
+libcryptsetup_token_tpm2_la_LDFLAGS = $(TOKENS_LDFLAGS)
+libcryptsetup_token_tpm2_la_SOURCES = \
+	tokens/tpm2/libcryptsetup-token-tpm2.c \
+	tokens/tpm2/utils_tpm2.h \
+	tokens/tpm2/utils_tpm2.c \
+	tokens/tpm2/utils_tpm2_json.c
+
+libcryptsetup_token_tpm2_la_LIBADD = -lm libcryptsetup.la @JSON_C_LIBS@ @TSS2_ESYS_LIBS@
+lib_LTLIBRARIES += libcryptsetup-token-tpm2.la
+
+cryptsetup_tpm2_SOURCES = \
+	tokens/tpm2/cryptsetup-tpm2.c \
+	tokens/tpm2/utils_tpm2.h \
+	tokens/tpm2/utils_tpm2.c \
+	tokens/tpm2/utils_tpm2_json.c \
+	src/cryptsetup.h \
+	src/utils_tools.c \
+	src/utils_password.c \
+	lib/utils_io.c \
+	lib/utils_crypt.c
+
+cryptsetup_tpm2_LDADD = -lm libcryptsetup.la \
+	@JSON_C_LIBS@		\
+	@TSS2_ESYS_LIBS@	\
+	@POPT_LIBS@		\
+	@PWQUALITY_LIBS@	\
+	@PASSWDQC_LIBS@
+cryptsetup_tpm2_CFLAGS = $(AM_CFLAGS)
+sbin_PROGRAMS += cryptsetup-tpm2
