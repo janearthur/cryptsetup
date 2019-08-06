@@ -116,7 +116,7 @@ static int action_tpm2_add(struct crypt_device *cd)
 	if (r < 0)
 		goto out;
 
-	if (!opt_no_tpm_pin ) {
+	if (!opt_no_tpm_pin) {
 		r = tools_get_key("Enter new TPM password:",
 				  &tpm_pin, &tpm_pin_len,
 				  0, 0, NULL, opt_timeout, 1, 0, cd);
@@ -274,7 +274,10 @@ int main(int argc, const char **argv)
 	popt_context = poptGetContext("cryptsetup_tpm2", argc, argv, token_popt_options, 0);
 	poptSetOtherOptionHelp(popt_context, "[OPTION...] <action> <action-specific>");
 
-	poptGetNextOpt(popt_context);
+	while ((r = poptGetNextOpt(popt_context)) > 0) ;
+	if (r < -1)
+		usage(popt_context, EXIT_FAILURE, poptStrerror(r),
+		      poptBadOption(popt_context, POPT_BADOPTION_NOALIAS));
 
 	if (!(aname = poptGetArg(popt_context)))
 		usage(popt_context, EXIT_FAILURE, "Argument <action> missing.",

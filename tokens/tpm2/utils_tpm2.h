@@ -46,6 +46,9 @@ void my_logger(struct crypt_device *cd, int level, const char *format, ...);
 /** Flag for activating the SHA384 PCR bank */
 #define CRYPT_TPM_PCRBANK_SHA384 (1 << 2)
 
+/** Flag for activating the SHA512 PCR bank */
+#define CRYPT_TPM_PCRBANK_SHA512 (1 << 3)
+
 int tpm_nv_read(struct crypt_device *cd,
 	uint32_t tpm_nv,
 	const char *pin,

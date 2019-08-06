@@ -48,6 +48,8 @@ int tpm2_token_get_pcrbanks(const char *pcrbanks_str, uint32_t *pcrbanks)
 			*pcrbanks |= CRYPT_TPM_PCRBANK_SHA256;
 		else if (!strcasecmp(p, "sha384"))
 			*pcrbanks |= CRYPT_TPM_PCRBANK_SHA384;
+		else if (!strcasecmp(p, "sha512"))
+			*pcrbanks |= CRYPT_TPM_PCRBANK_SHA512;
 		else
 			r = -EINVAL;
 	}
@@ -64,6 +66,8 @@ static void tpm2_token_set_pcrbanks(json_object *jobj, uint32_t pcrbanks)
 		json_object_array_add(jobj, json_object_new_string("sha256"));
 	if (pcrbanks & CRYPT_TPM_PCRBANK_SHA384)
 		json_object_array_add(jobj, json_object_new_string("sha384"));
+	if (pcrbanks & CRYPT_TPM_PCRBANK_SHA512)
+		json_object_array_add(jobj, json_object_new_string("sha512"));
 }
 
 int tpm2_token_get_pcrs(const char *pcrs_str, uint32_t *pcrs)

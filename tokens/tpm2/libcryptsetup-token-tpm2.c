@@ -65,6 +65,8 @@ static void tpm2_token_dump(struct crypt_device *cd, const char *json)
 		strcat(buf, n++ ? ",sha256" : "sha256");
 	if (pcrbanks & CRYPT_TPM_PCRBANK_SHA384)
 		strcat(buf, n++ ? ",sha384" : "sha384");
+	if (pcrbanks & CRYPT_TPM_PCRBANK_SHA512)
+		strcat(buf, n++ ? ",sha512" : "sha512");
 	l_std(cd, "\tPCRBanks: %s\n", buf);
 
 	*buf = '\0';

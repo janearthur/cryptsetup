@@ -203,6 +203,11 @@ static TSS2_RC tpm_policy_Read(struct crypt_device *cd,
 		pcrs.count++;
 	}
 
+	if (pcrbanks & CRYPT_TPM_PCRBANK_SHA512) {
+		pcrs.pcrSelections[pcrs.count].hash = TPM2_ALG_SHA512;
+		pcrs.count++;
+	}
+
 	for (i = 0; i < pcrs.count; i++) {
 		pcrs.pcrSelections[i].sizeofSelect = 3;
 		pcrs.pcrSelections[i].pcrSelect[0] = tpm_pcr      & 0xff;
